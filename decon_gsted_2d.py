@@ -1,14 +1,26 @@
-import numpy as np
-from simple_tif import tif_to_array, array_to_tif
-from scipy.ndimage import gaussian_filter
-from scipy.signal import fftconvolve
+#
+# Adapted from code.google.com/p/iterative-fusion
+#
 
-print "Loading resolution_target.tif..."
-actual_object = tif_to_array('resolution_target.tif'
-                             )[0, :, :].astype(np.float64)
+
+import os
+import numpy as np
+from PIL import Image
+from scipy.ndimage.filters import gaussian_filter
+from scipy.signal import fftconvolve
+import matplotlib.pyplot as plt
+plt.ion()
+
+img_directory = os.path.expanduser('~/foxsi/img')
+source_directory = os.path.expanduser('~/foxsi/iterative-fusion/resolution_targets')
+source_filename = 'resolution_target_lena.tif'
+
+filepath = os.path.join(source_directory, source_filename)
+
+print "Loading {:s}".format(filepath)
+actual_object = np.array(Image.open(filepath), dtype=np.float64)
 pointlike_object = np.zeros_like(actual_object)
-pointlike_object[pointlike_object.shape[0]//2,
-                 pointlike_object.shape[1]//2] = 1
+pointlike_object[pointlike_object.shape[0]//2, pointlike_object.shape[1]//2] = 1
 print "Done loading."
 
 num_timepoints = 10
@@ -19,20 +31,22 @@ blurred_object = np.zeros(
 blurred_pointlike_object = np.zeros_like(blurred_object)
 print "Blurring..."
 for i in range(num_timepoints):
-    print " Blurring timepoint", i
+    print " Blurring timepoint", i, sigma_range[i]
     gaussian_filter(signal_range[i] * actual_object,
                     sigma=sigma_range[i],
                     output=blurred_object[i, :, :])
     gaussian_filter(signal_range[i] * pointlike_object,
                     sigma=sigma_range[i],
                     output=blurred_pointlike_object[i, :, :])
+
+sigma_index = 0
+
 print "Done blurring."
 print "Saving blurred_object.tif"
-array_to_tif(blurred_object.astype(np.float32), 'blurred_object.tif')
+plt.imsave(os.path.join(img_directory, 'blurred_object'), blurred_object[sigma_index, :, :])
 print "Done saving."
 print "Saving blurred_pointlike_object.tif"
-array_to_tif(blurred_pointlike_object.astype(np.float32),
-             'blurred_pointlike_object.tif')
+plt.imsave(os.path.join(img_directory, 'blurred_pointlike_object'), blurred_pointlike_object[sigma_index, :, :])
 print "Done saving."
 
 noisy_object = np.zeros(blurred_object.shape, dtype=np.float64)
@@ -43,17 +57,19 @@ for p in range(num_timepoints):
     print " Adding Poisson noise to slice", p
     noisy_object[p, :, :] = np.random.poisson(lam=0.5*blurred_object[p, :, :])
 print "Saving noisy_object.tif"
-array_to_tif(noisy_object.astype(np.float32), 'noisy_object.tif')
+im = Image.fromarray(noisy_object[sigma_index, :, :])
+plt.imsave(os.path.join(img_directory, 'noisy_object'), noisy_object[sigma_index, :, :])
+
 print "Done saving."
 
 print "Saving cumulative_sum.tif"
 cumulative_sum = np.cumsum(noisy_object[::-1, :, :], axis=0)
 print cumulative_sum.dtype
-array_to_tif(cumulative_sum.astype(np.float32), 'cumulative_sum.tif')
+plt.imsave(os.path.join(img_directory, 'cumulative_sum'), cumulative_sum[sigma_index, :, :])
 print "Done saving"
 print "Saving cumulative_sum_psf.tif"
 cumulative_sum_psf = np.cumsum(blurred_pointlike_object[::-1, :, :], axis=0)
-array_to_tif(cumulative_sum_psf.astype(np.float32), 'cumulative_sum_psf.tif')
+plt.imsave(os.path.join(img_directory, 'cumulative_sum_psf'), cumulative_sum_psf[sigma_index, :, :])
 print "Done saving"
 
 measurement = noisy_object
@@ -89,13 +105,13 @@ for i in range(num_iterations):
     np.multiply(estimate, correction_factor.mean(axis=0), out=estimate)
     estimate_history[i+1, :, :] = estimate
     print " Saving history..."
-    array_to_tif(estimate_history.astype(np.float32), 'estimate_history.tif')
+    #array_to_tif(estimate_history.astype(np.float32), 'estimate_history.tif')
 print "Done deconvolving"
 
 """
 For reference, we want to  compare our new type of deconvolution to
 standard deconvolution of the same data. Since we don't know which
-slice of the cumulative sum will loook the best, we'll deconvolve them
+slice of the cumulative sum will look the best, we'll deconvolve them
 all. If our new type of decon is any good, it'll look better than any
 of these frames.
 """
@@ -138,3 +154,30 @@ for i in range(num_iterations):
                  'estimate_cumsum.tif')
 print "Done deconvolving"
 
+
+def ingaramo_deconvolve(n_iterations=100):
+    pass
+
+    print "Deconvolving noisy object..."
+    for i in range(n_iterations):
+        print " Iteration", i
+        for t in range(num_timepoints):
+            # print " Blurring timepoint", t
+            gaussian_filter(signal_range[t] * estimate,
+                            sigma=sigma_range[t],
+                            output=blurred_estimate[t, :, :])
+        print " Done blurring."
+        print " Computing correction ratio..."
+        np.divide(measurement, blurred_estimate, out=correction_factor)
+        print " Blurring correction ratio..."
+        for t in range(num_timepoints):
+            # print "  Blurring timepoint", t
+            gaussian_filter(signal_range[t] * correction_factor[t, :, :],
+                            sigma=sigma_range[t],
+                            output=correction_factor[t, :, :])
+        print " Done blurring."
+        np.multiply(estimate, correction_factor.mean(axis=0), out=estimate)
+        estimate_history[i+1, :, :] = estimate
+        print " Saving history..."
+        #array_to_tif(estimate_history.astype(np.float32), 'estimate_history.tif')
+    print "Done deconvolving"
