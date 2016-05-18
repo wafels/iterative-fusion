@@ -9,6 +9,7 @@ from PIL import Image
 from scipy.ndimage.filters import gaussian_filter
 from scipy.signal import fftconvolve
 import matplotlib.pyplot as plt
+from astropy.io import readsav
 plt.ion()
 
 img_directory = os.path.expanduser('~/foxsi/img')
@@ -158,32 +159,66 @@ print "Done deconvolving"
 def ingaramo_deconvolve(n_iterations=100):
     pass
 
-    print "Deconvolving noisy object..."
 
-    for i in range(n_iterations):
-        print " Iteration", i
+#
+# Load in all the images
+#
+directory = os.path.expanduser('~/')
+n_observed_images = 7
+for i in range(0, 7):
+    file_path = os.path.join(directory, 'map{:n}.sav'.format(i))
+    this_image = readsav(file_path)
+    data = this_image['map' + str(i)]
+    ny = data.shape[0]
+    nx = data.shape[1]
+    if i == 0:
+        observed_images = np.zeros((n_observed_images, ny, nx))
 
-        for t in range(num_timepoints):
-            #
-            # Take the estimated true image and apply the PSF
-            #
-            blurred_estimate[t, :, :] = gaussian_filter(signal_range[t] * estimate, sigma=sigma_range[t])
+    observed_images[i, :, :] = data[:, :]
+
+#
+# Which images do we want to deconvolve
+#
+these_images = [0, 1]
+n_images = len(these_images)
+
+
+
+#
+# How many interations
+#
+n_iterations = 100
+
+measurement = observed_images[these_images, :, :]
+
+source_estimate_history = np.zeros((n_iterations, ny, nx))
+
+print("Deconvolving noisy object...")
+
+for i in range(n_iterations):
+    print(" Iteration", i)
+
+    for t in range(num_timepoints):
         #
-        # Compute correction factor
+        # Take the estimated true image and apply the PSF
         #
-        correction_factor = np.divide(measurement, blurred_estimate)
+        blurred_estimate[t, :, :] = gaussian_filter(signal_range[t] * estimate, sigma=sigma_range[t])
+    #
+    # Compute correction factor
+    #
+    correction_factor = np.divide(measurement, blurred_estimate)
 
-        print " Blurring correction ratio..."
-        for t in range(num_timepoints):
-            #
-            # Update the correction factor
-            #
-            correction_factor[t, :, :] = gaussian_filter(signal_range[t] * correction_factor[t, :, :], sigma=sigma_range[t])
+    print(" Blurring correction ratio...")
+    for t in range(num_timepoints):
+        #
+        # Update the correction factor
+        #
+        correction_factor[t, :, :] = gaussian_filter(signal_range[t] * correction_factor[t, :, :], sigma=sigma_range[t])
 
-        estimate = np.multiply(estimate, correction_factor.mean(axis=0))
+    estimate = np.multiply(estimate, correction_factor.mean(axis=0))
 
-        # Save the evolution of the estimate
-        estimate_history[i+1, :, :] = estimate
+    # Save the evolution of the estimate
+    source_estimate_history[i+1, :, :] = estimate
 
 
-    print "Done deconvolving"
+print("Done deconvolving")
