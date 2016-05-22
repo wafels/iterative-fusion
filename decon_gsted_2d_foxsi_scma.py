@@ -1,6 +1,8 @@
 #
 # Adapted from code.google.com/p/iterative-fusion
 #
+# For use with FOXSI 2014 data
+#
 
 
 import os
@@ -66,6 +68,23 @@ def transmogrify(img, sigma):
     return img2
 
 
+def show_image_set(images, title):
+    """
+    Make a matplotlib plot of the image set
+    :param images:
+    :return: a plot of all the images
+    """
+    n_images = images.shape[0]
+    ncols = int(np.ceil(np.sqrt(1.0 * n_images)))
+    nrows = int(n_images/ncols)
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, sharex=True, sharey=True)
+    for nrow in range(0, nrows):
+        for ncol in range(0, ncols):
+            n = ncol + nrow*ncols
+            axes[nrow, ncol].imshow(images[n, :, :])
+    plt.show()
+
+
 analysis_type = 'test'
 
 #
@@ -118,7 +137,7 @@ source_estimate_history = np.zeros((n_iterations+1, ny, nx))
 # The initial estimate
 estimate = np.ones((ny, nx))
 
-print("Deconvolving noisy object...")
+print("Ingaramo deconvolution of images of noisy source...")
 source_estimate_history[0, :, :] = estimate
 for i in range(n_iterations):
     print("Iteration", i)
@@ -145,3 +164,6 @@ for i in range(n_iterations):
     # Save the evolution of the estimate
     print(source_estimate_history[i+1, :, :].min(), source_estimate_history[i, :, :].max())
     source_estimate_history[i+1, :, :] = estimate
+
+
+# Deconvolve each image separately for comparison
